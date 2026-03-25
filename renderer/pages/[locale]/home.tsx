@@ -1,0 +1,666 @@
+import {
+  Button,
+  Card,
+  CardBody,
+  CardFooter,
+  Chip,
+  Divider,
+} from "@heroui/react";
+import { useTranslation } from "next-i18next";
+import { useTheme } from "next-themes";
+import { useRouter } from 'next/router';
+import { useEffect, useRef, useState } from "react";
+import AuthModal from "../../components/AuthModal";
+import MsalModal from "../../components/MsalModal";
+import Layout from "../../components/Layout";
+import Loading from "../../components/Loading";
+import Nav from "../../components/Nav";
+import { useSettings } from "../../context/userContext";
+import Ipc from "../../lib/ipc";
+
+import Image from "next/image";
+import { FOCUS_ELEMS } from '../../common/constans';
+
+import getServer from '../../lib/get-server';
+import { getStaticPaths, makeStaticProperties } from "../../lib/get-static";
+
+const LOCAL_CONSOLES = 'local-consoles';
+
+function Home() {
+  const { t, i18n: { language: locale } } = useTranslation('home');
+
+  const router = useRouter();
+  const { settings, setSettings } = useSettings();
+  const { theme, setTheme } = useTheme();
+  const [loading, setLoading] = useState(false);
+  const [loadingText, setLoadingText] = useState("");
+  const [isLogined, setIsLogined] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showMsalModal, setShowMsalModal] = useState(false);
+  const [msalData, setMsalData] = useState<any>(null);
+  const [server, setServer]= useState<any>(null);
+  const [consoles, setConsoles] = useState<{
+    serverId: string,
+    name: string,
+    locale: string,
+    region: string,
+    consoleType: "XboxSeriesX" | "XboxSeriesS" | "XboxOne" | "XboxOneS" | "XboxOneX",
+    powerState: "ConnectedStandby" | "On" | "Off",
+    digitalAssistantRemoteControlEnabled: boolean,
+    remoteManagementEnabled: boolean,
+    consoleStreamingEnabled: boolean,
+    wirelessWarning: boolean,
+    outOfHomeWarning: boolean,
+    storageDevices: {
+      storageDeviceId: string,
+      storageDeviceName: string,
+      isDefault: boolean,
+      freeSpaceBytes: number,
+      totalSpaceBytes: number,
+      isGen9Compatible: any
+    }[]
+  }[]>([]);
+
+  const authInterval = useRef(null);
+  const autoConnectTriggered = useRef(false);
+
+  const currentIndex = useRef(0);
+  const focusable = useRef<any>([]);
+
+  useEffect(() => {
+    const localTheme = localStorage.getItem('theme');
+    if (localTheme === 'xbox-light') {
+      setTheme(localTheme)
+    }
+
+    const localFontSize = localStorage.getItem('fontSize');
+    if (localFontSize && localFontSize !== '16') {
+      document.documentElement.style.fontSize = localFontSize + 'px';
+    }
+
+    setLoading(true);
+    setLoadingText(t("Loading..."));
+
+    getServer().then((res: any) => {
+      if (res && res.url) {
+        console.log('getServer res:', res)
+        setServer(res)
+      }
+    })
+
+    focusable.current = document.querySelectorAll(FOCUS_ELEMS);
+
+    const clearAllFocus = () => {
+      if (focusable.current) {
+        Array.from(focusable.current).forEach(elem => {
+          (elem as HTMLElement).style.outline = 'none';
+        });
+      }
+    };
+
+    function nextItem(index) {
+      index++;
+      currentIndex.current = index % focusable.current.length;
+      const elem = focusable.current[currentIndex.current];
+
+      clearAllFocus();
+
+      if (elem) {
+        elem.style.outline = '2px solid #FFB900';
+        elem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+
+    function prevItem(index) {
+      clearAllFocus();
+
+      if (index === 0) {
+        currentIndex.current = focusable.current.length - 1
+      } else {
+        index -= 1;
+        currentIndex.current = index % focusable.current.length;
+      }
+
+      const elem = focusable.current[currentIndex.current];
+
+      if (elem) {
+        elem.style.outline = '2px solid #FFB900';
+        elem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+
+    function clickItem() {
+      setTimeout(() => {
+        const elem = focusable.current[currentIndex.current];
+        if (elem) {
+          elem.style.outline = 'none';
+          elem.click();
+        }
+      }, 300);
+    }
+
+    const pollGamepads = () => {
+      const gamepads = navigator.getGamepads();
+      let _gamepad = null
+      gamepads.forEach(gp => {
+        if (gp) _gamepad = gp
+      })
+      if (_gamepad) {
+        _gamepad.buttons.forEach((b, idx) => {
+          if (b.pressed) {
+            if (idx === 0) {
+              clickItem();
+            } else if (idx === 12) {
+              prevItem(currentIndex.current);
+            } else if (idx === 13) {
+              nextItem(currentIndex.current);
+            } else if (idx === 14) {
+              prevItem(currentIndex.current);
+            } else if (idx === 15) {
+              nextItem(currentIndex.current);
+            }
+          }
+        })
+      }
+    }
+
+    const timer = setInterval(pollGamepads, 100);
+
+    const _isLogined = window.sessionStorage.getItem("isLogined") || "0";
+    if (_isLogined === "1") {
+      setIsLogined(true);
+    }
+
+    if (_isLogined === "1") {
+      // Get Consoles
+      let _consoles: any = localStorage.getItem(LOCAL_CONSOLES) || '[]'
+
+      try {
+        _consoles = JSON.parse(_consoles)
+      } catch {
+        _consoles = []
+      }
+
+      if (_consoles.length) {
+        setConsoles(_consoles);
+        setLoading(false);
+
+        setTimeout(() => {
+          focusable.current = document.querySelectorAll(FOCUS_ELEMS);
+        }, 1000);
+
+        Ipc.send("consoles", "get").then(res => {
+          setConsoles(res);
+          localStorage.setItem(LOCAL_CONSOLES, JSON.stringify(res));
+
+          setTimeout(() => {
+            focusable.current = document.querySelectorAll(FOCUS_ELEMS);
+          }, 1000);
+        });
+      } else {
+        setLoadingText(t("Fetching consoles..."));
+        Ipc.send("consoles", "get").then(res => {
+          setConsoles(res);
+          setLoading(false);
+
+          setTimeout(() => {
+            focusable.current = document.querySelectorAll(FOCUS_ELEMS);
+          }, 1000);
+        });
+      }
+    } else {
+      Ipc.send("app", "checkAuthentication").then((isLogin) => {
+        if (isLogin) {
+          // Silence login, refresh token
+          console.log("Silence login, refresh token");
+          authInterval.current = setInterval(() => {
+            console.log("Requesting AuthState...");
+
+            Ipc.send("app", "getAuthState").then((args) => {
+              console.log("Received AuthState:", args);
+
+              if (args.isAuthenticating === true) {
+                setLoading(true);
+              } else if (
+                args.isAuthenticated === true &&
+                args.user.signedIn === true
+              ) {
+                clearInterval(authInterval.current);
+                window.sessionStorage.setItem("isLogined", "1");
+                setIsLogined(true);
+
+                // Get Consoles
+                let _consoles: any = localStorage.getItem(LOCAL_CONSOLES) || '[]'
+
+                try {
+                  _consoles = JSON.parse(_consoles)
+                } catch {
+                  _consoles = []
+                }
+
+                if (_consoles.length) {
+                  setConsoles(_consoles);
+                  setLoading(false);
+
+                  // Silent update
+                  Ipc.send("consoles", "get").then(res => {
+                    setConsoles(res);
+
+                    localStorage.setItem(LOCAL_CONSOLES, JSON.stringify(res));
+
+                    setTimeout(() => {
+                      focusable.current = document.querySelectorAll(FOCUS_ELEMS);
+                    }, 1000);
+                  });
+
+                  setTimeout(() => {
+                    focusable.current = document.querySelectorAll(FOCUS_ELEMS);
+                  }, 1000);
+                } else {
+                  setLoadingText(t("Fetching consoles..."));
+                  Ipc.send("consoles", "get").then(res => {
+                    setConsoles(res);
+                    setLoading(false);
+
+                    localStorage.setItem(LOCAL_CONSOLES, JSON.stringify(res));
+
+                    setTimeout(() => {
+                      focusable.current = document.querySelectorAll(FOCUS_ELEMS);
+                    }, 1000);
+                  });
+                }
+
+              }
+            });
+          }, 500);
+        } else {
+          console.log("Full auth flow");
+          setLoading(false);
+          setShowLoginModal(true);
+        }
+      });
+    }
+
+
+    return () => {
+      if (authInterval.current) clearInterval(authInterval.current);
+      timer && clearInterval(timer);
+    };
+  }, [t, setTheme]);
+
+  useEffect(() => {
+    if (!isLogined || consoles.length === 0 || autoConnectTriggered.current) {
+      return;
+    }
+
+    autoConnectTriggered.current = true;
+
+    Ipc.send("app", "getStartupFlags").then((flags: any) => {
+      if ((flags && flags.autoConnect)) {
+        console.log("Auto-connect flag detected:", flags.autoConnect);
+        const console_ = consoles.find(c => c.name === flags.autoConnect || c.serverId === flags.autoConnect);
+
+        if (console_) {
+          console.log("Found matching console, starting auto connect:", flags.autoConnect);
+          setTimeout(() => {
+            if (console_.powerState === "On") {
+              startSession(console_.serverId);
+            } else {
+              powerOnAndStartSession(console_.serverId);
+            }
+            Ipc.send("app", "resetAutoConnect");
+          }, 500);
+        } else {
+          console.log("No matching console found for auto connect:", flags.autoConnect);
+          Ipc.send("app", "resetAutoConnect");
+        }
+      }
+    });
+  }, [isLogined, consoles]);
+
+  const handleLogin = () => {
+    setLoading(true);
+    setLoadingText(t("Loading..."));
+    setShowLoginModal(false);
+    if (settings.use_msal) {
+      Ipc.send("app", "msalLogin").then(data => {
+        setMsalData(data);
+        setLoading(false);
+        setShowMsalModal(true);
+      });
+    } else {
+      Ipc.send("app", "login").then(() => {
+        // Check login state
+        authInterval.current = setInterval(() => {
+          console.log("Requesting AuthState...");
+          Ipc.send("app", "getAuthState").then((args) => {
+            console.log("Received AuthState:", args);
+
+            if (args.isAuthenticating === true) {
+              setLoading(true);
+            } else if (
+              args.isAuthenticated === true &&
+              args.user.signedIn === true
+            ) {
+              clearInterval(authInterval.current);
+              setIsLogined(true);
+              window.sessionStorage.setItem("isLogined", "1");
+              setLoading(false);
+
+              // Get Consoles
+              let _consoles: any = localStorage.getItem(LOCAL_CONSOLES) || '[]'
+
+              try {
+                _consoles = JSON.parse(_consoles)
+              } catch {
+                _consoles = []
+              }
+
+              if (_consoles.length) {
+                setConsoles(_consoles);
+                
+                // Silent update
+                Ipc.send("consoles", "get").then(res => {
+                  console.log("consoles:", res);
+                  setConsoles(res);
+
+                  localStorage.setItem(LOCAL_CONSOLES, JSON.stringify(res));
+
+                  setTimeout(() => {
+                    focusable.current = document.querySelectorAll(FOCUS_ELEMS);
+                  },  1000);
+                });
+
+                setTimeout(() => {
+                  focusable.current = document.querySelectorAll(FOCUS_ELEMS);
+                },  1000);
+              } else {
+                setLoading(true);
+                setLoadingText(t("Fetching consoles..."));
+                Ipc.send("consoles", "get").then(res => {
+                  console.log("consoles:", res);
+                  setConsoles(res);
+                  setLoading(false);
+
+                  localStorage.setItem(LOCAL_CONSOLES, JSON.stringify(res));
+
+                  setTimeout(() => {
+                    focusable.current = document.querySelectorAll(FOCUS_ELEMS);
+                  },  1000);
+                });
+              }
+              
+            }
+          });
+        }, 500);
+      });
+    }
+  };
+
+  const handleMsalComplete = () => {
+    setShowMsalModal(false);
+    // Check login state
+    authInterval.current = setInterval(() => {
+      console.log("Requesting AuthState...");
+      Ipc.send("app", "getAuthState").then((args) => {
+        console.log("Received AuthState:", args);
+
+        if (args.isAuthenticating === true) {
+          setLoading(true);
+        } else if (
+          args.isAuthenticated === true &&
+          args.user.signedIn === true
+        ) {
+          clearInterval(authInterval.current);
+          setIsLogined(true);
+          window.sessionStorage.setItem("isLogined", "1");
+          setLoading(false);
+
+          // Get Consoles
+          let _consoles: any = localStorage.getItem(LOCAL_CONSOLES) || '[]'
+
+          try {
+            _consoles = JSON.parse(_consoles)
+          } catch {
+            _consoles = []
+          }
+
+          if (_consoles.length) {
+            setConsoles(_consoles);
+            
+            // Silent update
+            Ipc.send("consoles", "get").then(res => {
+              console.log("consoles:", res);
+              setConsoles(res);
+
+              localStorage.setItem(LOCAL_CONSOLES, JSON.stringify(res));
+
+              setTimeout(() => {
+                focusable.current = document.querySelectorAll(FOCUS_ELEMS);
+              },  1000);
+            });
+
+            setTimeout(() => {
+              focusable.current = document.querySelectorAll(FOCUS_ELEMS);
+            },  1000);
+          } else {
+            setLoading(true);
+            setLoadingText(t("Fetching consoles..."));
+            Ipc.send("consoles", "get").then(res => {
+              console.log("consoles:", res);
+              setConsoles(res);
+              setLoading(false);
+
+              localStorage.setItem(LOCAL_CONSOLES, JSON.stringify(res));
+
+              setTimeout(() => {
+                focusable.current = document.querySelectorAll(FOCUS_ELEMS);
+              },  1000);
+            });
+          }
+          
+        }
+      });
+    }, 500);
+  };
+
+  const toggleAutoConnect = (serverId: string) => {
+    if (settings.xhome_auto_connect_server_id === serverId) {
+      setSettings({
+        ...settings,
+        xhome_auto_connect_server_id: ''
+      });
+    } else {
+      setSettings({
+        ...settings,
+        xhome_auto_connect_server_id: serverId
+      });
+    }
+  };
+
+  const powerOnAndStartSession = (sessionId: string) => {
+    setLoading(true);
+    setLoadingText(t("Loading..."));
+    Ipc.send("consoles", "powerOn", sessionId).then(res => {
+      console.log('poweron result:', res);
+      startSession(sessionId);
+      setLoading(false);
+    }).catch(() => {
+      startSession(sessionId);
+      setLoading(false);
+    });
+  };
+
+  const startSession = (sessionId: string) => {
+    console.log("sessionId:", sessionId);
+    const query: any = { serverid: sessionId };
+
+    const { server_url, server_username, server_credential } = settings;
+
+    // Custom server
+    if (server_url && server_username && server_credential) {
+      query.server_url = server_url;
+      query.server_username = server_username;
+      query.server_credential = server_credential;
+    } else if (server) { // Default server
+      const { url, username, credential } = server;
+      query.server_url = url;
+      query.server_username = username;
+      query.server_credential = credential;
+    }
+
+    router.push({
+      pathname: `/${locale}/stream`,
+      query
+    });
+  };
+
+  const handleRefreshMsalData = () => {
+    Ipc.send("app", "restart");
+  }
+
+  const handleSettings = () => {
+    router.push(`/${locale}/settings`);
+  }
+
+  return (
+    <>
+      <Nav current={t("Consoles")} isLogined={isLogined} />
+
+      {loading && <Loading loadingText={loadingText} />}
+
+      <AuthModal show={showLoginModal} onSettings={handleSettings} onConfirm={handleLogin} />
+      {msalData && (
+        <MsalModal
+          verificationUri={msalData.verification_uri}
+          userCode={msalData.user_code}
+          expiresIn={msalData.expires_in}
+          show={showMsalModal}
+          onConfirm={handleMsalComplete}
+          onRefresh={handleRefreshMsalData}
+        />
+      )}
+
+      <Layout>
+        <div className="gap-4 grid grid-cols-3">
+          {consoles.map((console) => {
+            let consoleName: string;
+            switch (console.consoleType) {
+              case "XboxOne":
+                consoleName = "Xbox One";
+                break;
+              case "XboxOneS":
+                consoleName = "Xbox One S";
+                break;
+              case "XboxOneX":
+                consoleName = "Xbox One X";
+                break;
+              case "XboxSeriesS":
+                consoleName = "Xbox Series S";
+                break;
+              case "XboxSeriesX":
+                consoleName = "Xbox Series X";
+                break;
+              default:
+                consoleName = console.consoleType;
+                break;
+            }
+            let consoleImg = "/images/xss.svg";
+            if (theme === "xbox-light") {
+              consoleImg = "/images/xss-light.svg";
+            }
+
+            if (console.consoleType === "XboxSeriesX") {
+              consoleImg = "/images/series-x.png";
+            } else if (console.consoleType === "XboxSeriesS") {
+              consoleImg = "/images/series-s.png";
+            }
+            
+            const isAutoConnectEnabled = settings.xhome_auto_connect_server_id === console.serverId;
+            
+            return (
+              <Card key={console.serverId}>
+                <CardBody>
+                  <p className="text-center">{console.name}</p>
+                  <p className="text-center text-sm text-gray-400">
+                    {consoleName}
+                  </p>
+                  <p className="text-center text-xs text-gray-500">
+                    ({console.serverId})
+                  </p>
+                  <div className="flex justify-center items-center">
+                    <Image
+                      src={consoleImg}
+                      alt="xss"
+                      draggable="false"
+                      width={130}
+                      height={130}
+                    />
+                  </div>
+                  <div className="flex justify-center py-1">
+                    {console.powerState === "On" ? (
+                      <Chip size="sm" radius="none" color="success">
+                        {t("Powered on")}
+                      </Chip>
+                    ) : console.powerState === "ConnectedStandby" ? (
+                      <Chip size="sm" radius="none" color="warning">
+                        {t("Standby")}
+                      </Chip>
+                    ) : (
+                      <Chip size="sm" radius="none">
+                        {console.powerState}
+                      </Chip>
+                    )}
+                  </div>
+                </CardBody>
+                <Divider />
+                <CardFooter>
+                  <div className="flex flex-col gap-2 w-full">
+                    {
+                      settings.power_on && console.powerState === 'ConnectedStandby' ? (
+                        <Button
+                          color="primary"
+                          size="sm"
+                          fullWidth
+                          onPress={() => powerOnAndStartSession(console.serverId)}
+                        >
+                          {t('Power on and start stream')}
+                        </Button>
+                      ) : (
+                        <Button
+                          color="primary"
+                          size="sm"
+                          fullWidth
+                          onPress={() => startSession(console.serverId)}
+                        >
+                          {t('Start stream')}
+                        </Button>
+                      )
+                    }
+                    
+                    <Button
+                      color={isAutoConnectEnabled ? "secondary" : "default"}
+                      size="sm"
+                      fullWidth
+                      onPress={() => toggleAutoConnect(console.serverId)}
+                    >
+                      {isAutoConnectEnabled ? t('auto_connect_enabled') : t('enable_auto_connect')}
+                    </Button>
+                  </div>
+                </CardFooter>
+              </Card>
+            );
+          })}
+        </div>
+      </Layout>
+    </>
+  );
+}
+
+export default Home;
+
+// eslint-disable-next-line react-refresh/only-export-components
+export const getStaticProps = makeStaticProperties(["common", "home"]);
+
+// eslint-disable-next-line react-refresh/only-export-components
+export { getStaticPaths };
