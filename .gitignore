@@ -4,7 +4,6 @@
 .next
 *.log
 .next
-app/
 dist
 # Xcode
 #
