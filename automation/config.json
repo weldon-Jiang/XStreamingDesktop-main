@@ -1,0 +1,43 @@
+{
+  "xstreaming": {
+    "path": "D:\\auto-xbox\\XStreamingDesktop-main",
+    "dev_command": "npm run dev",
+    "window_title": "XStreaming",
+    "timeout": {
+      "startup": 60,
+      "login": 120,
+      "stream": 180,
+      "page_load": 30
+    }
+  },
+  "account": {
+    "email": "jwdong1991@outlook.com",
+    "password": "jwdong@666"
+  },
+  "automation": {
+    "enabled": true,
+    "retry_count": 3,
+    "retry_delay": 5,
+    "screenshot_dir": "./screenshots"
+  },
+  "ui_templates": {
+    "template_dir": "./templates",
+    "login_button": "1_login_button.png",
+    "login_user_account": "2_login_user_account.png",
+    "login_next_button": "3_login_next_button.png",
+    "login_password": "4_login_password.png",
+    "login_account_button": "5_login_account_button.png",
+    "login_loading": "6_login_loading.png",
+    "home_indicator": "7_home_indicator.png",
+    "console_card": "8_console_card.png",
+    "stream_button": "9_stream_button.png",
+    "stream_connecting": "10_stream_connecting.png",
+    "configuration_successfully": "11_configuration_successfully.png",
+    "ready_send_to_ICE": "12_ready_send_to_ICE.png",
+    "stream_connection_successfully": "13_stream_connection_successfully.png",
+    "xbox_home_page": "14_xbox_home_page.png",
+    "chose_game_FC26_button": "15_chose_game_FC26_button.png",
+    "play_game_button": "16_play_game_button.png",
+    "loading_game": "17_loading_game.png"
+  }
+}
