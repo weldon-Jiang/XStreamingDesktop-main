@@ -345,6 +345,26 @@ export default class Authentication {
       "[startWebviewHooks()] Starting webview hooks"
     );
 
+    const locale = process.env.NEXT_LOCALE || 'zh';
+    const acceptLanguage = locale === 'zh' ? 'zh-CN,zh;q=0.9,en;q=0.8' : 'en-US,en;q=0.9';
+
+    session.defaultSession.webRequest.onBeforeSendHeaders(
+      {
+        urls: [
+          "https://login.live.com/*",
+          "https://account.microsoft.com/*",
+        ],
+      },
+      (details, callback) => {
+        details.requestHeaders['Accept-Language'] = acceptLanguage;
+        this._application.log(
+          "authenticationV2",
+          `[startWebviewHooks()] Set Accept-Language: ${acceptLanguage}`
+        );
+        callback({ requestHeaders: details.requestHeaders });
+      }
+    );
+
     session.defaultSession.webRequest.onHeadersReceived(
       {
         urls: [

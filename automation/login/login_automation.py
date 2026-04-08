@@ -26,13 +26,33 @@ class LoginAutomation(BaseAutomation):
     """登录自动化控制器"""
 
     def __init__(self, ui_detector: UIDetector, account: dict, timeout: dict):
+        """
+        初始化登录自动化
+
+        Args:
+            ui_detector: UI 检测器实例
+            account: 账户信息 dict，包含 email 和 password
+            timeout: 超时配置 dict
+        """
         super().__init__(ui_detector)
-        self.account = account
-        self.timeout = timeout
+        self.account = account      # 账户信息
+        self.timeout = timeout      # 超时配置
 
     def _switch_to_english_input(self):
         """切换到英文输入模式"""
         try:
+            import win32gui
+            import win32api
+
+            hwnd = win32gui.GetForegroundWindow()
+            thread_id = win32api.GetWindowThreadProcessId(hwnd)
+            lang = win32api.GetKeyboardLayout(thread_id)
+            lang_low = lang & 0xFFFF
+
+            if lang_low == 0x0409:
+                logger.info("当前输入法已是英文模式，跳过切换")
+                return
+
             import pyautogui
             pyautogui.hotkey('ctrl', 'space')
             time.sleep(0.2)
@@ -68,24 +88,44 @@ class LoginAutomation(BaseAutomation):
         """检查登录状态"""
         logger.info("[checking] 检查登录状态...")
 
-        if self._wait_for_template("home_indicator", timeout=5, fail_on_timeout=False, confidence=0.7):
-            logger.info("[登录状态] 检测到主页指示器 -> 用户已登录")
-            return True
-
-        if self._wait_for_template("xbox_home_page", timeout=5, fail_on_timeout=False, confidence=0.7):
-            logger.info("[登录状态] 检测到 Xbox 主页 -> 用户已登录")
+        if self._wait_for_template("console_card", timeout=5, fail_on_timeout=False, confidence=0.7):
+            logger.info("[登录状态] 检测到控制台卡片 -> 用户已登录")
             return True
 
         if self._wait_for_template("login_button", timeout=30, fail_on_timeout=False, confidence=0.7):
             logger.info("[登录状态] 检测到登录按钮 -> 用户未登录，开始自动登录流程")
             return self._do_login()
 
-        if self._wait_for_template("login_user_account", timeout=30, fail_on_timeout=False, confidence=0.7):
-            logger.info("[登录状态] 检测到用户账户输入框 -> 用户未登录，开始自动登录流程")
-            return self._do_login()
+        logger.error("[登录状态] 未检测到明确的登录状态，可能是界面加载中或出现异常")
+        logger.info("[登录状态] 等待 10 秒后重试...")
+        time.sleep(10)
 
-        logger.warning("[登录状态] 未检测到明确的登录状态，尝试继续执行...")
-        return True
+        retry_result = self._check_login_retry()
+        if retry_result:
+            return True
+
+        logger.error("[登录状态] 重试后仍无法确定登录状态，终止自动化")
+        self.terminate("无法确定登录状态")
+        return False
+
+    def _check_login_retry(self, max_retry: int = 2) -> bool:
+        """重试检查登录状态"""
+        for attempt in range(max_retry):
+            logger.info(f"[登录状态] 重试检查 ({attempt + 1}/{max_retry})...")
+
+            if self._wait_for_template("console_card", timeout=5, fail_on_timeout=False, confidence=0.7):
+                logger.info("[登录状态] 重试后检测到控制台卡片 -> 用户已登录")
+                return True
+
+            if self._wait_for_template("login_button", timeout=10, fail_on_timeout=False, confidence=0.7):
+                logger.info("[登录状态] 重试后检测到登录按钮 -> 用户未登录")
+                return False
+
+            if attempt < max_retry - 1:
+                logger.warning(f"[登录状态] 重试 ({attempt + 1}) 未确定状态，等待 5 秒...")
+                time.sleep(5)
+
+        return False
 
     def _do_login(self) -> bool:
         """执行登录流程"""
@@ -109,11 +149,12 @@ class LoginAutomation(BaseAutomation):
         self._switch_to_english_input()
         time.sleep(0.3)
 
-        logger.info(f"输入账户: {self.account.get('email', '')}")
+        email = self.account.get('email', '')
+        logger.info(f"输入账户: {email}")
         import pyautogui
         pyautogui.hotkey('ctrl', 'a')
         time.sleep(0.2)
-        pyautogui.typewrite(self.account.get('email', ''), interval=0.05)
+        pyautogui.typewrite(email, interval=0.05)
         time.sleep(1)
 
         logger.info("点击下一步...")
@@ -132,11 +173,12 @@ class LoginAutomation(BaseAutomation):
             self._switch_to_english_input()
             time.sleep(0.3)
 
+            password = self.account.get('password', '')
             logger.info("输入密码...")
             import pyautogui
             pyautogui.hotkey('ctrl', 'a')
             time.sleep(0.2)
-            pyautogui.typewrite(self.account.get('password', ''), interval=0.05)
+            pyautogui.typewrite(password, interval=0.05)
             time.sleep(1)
 
             logger.info("点击登录...")

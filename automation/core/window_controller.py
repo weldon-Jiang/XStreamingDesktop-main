@@ -33,8 +33,14 @@ class WindowController:
     """窗口控制器"""
 
     def __init__(self, window_title: str = "XStreaming"):
-        self.window_title = window_title
-        self._hwnd = None
+        """
+        初始化窗口控制器
+
+        Args:
+            window_title: 要控制的窗口标题
+        """
+        self.window_title = window_title  # 窗口标题
+        self._hwnd = None              # 窗口句柄缓存
 
     def find_window(self) -> Optional[WindowInfo]:
         """查找窗口"""
@@ -142,6 +148,20 @@ class WindowController:
                 logger.error(f"恢复窗口失败: {e}")
         return False
 
+    def close_window(self) -> bool:
+        """关闭窗口"""
+        window = self.find_window()
+        if window:
+            try:
+                import win32gui
+                import win32con
+                win32gui.PostMessage(window.hwnd, win32con.WM_CLOSE, 0, 0)
+                logger.info("窗口已关闭")
+                return True
+            except Exception as e:
+                logger.error(f"关闭窗口失败: {e}")
+        return False
+
     def is_window_exists(self) -> bool:
         """检查窗口是否存在"""
         return self.find_window() is not None
@@ -196,9 +216,18 @@ class WindowController:
 class AppLauncher:
     """应用程序启动器"""
 
-    def __init__(self, app_path: str, app_command: str = None):
+    def __init__(self, app_path: str, app_command: str = None, lang: str = 'zh'):
+        """
+        初始化应用启动器
+
+        Args:
+            app_path: 应用路径
+            app_command: 启动命令，默认 'npm run dev'
+            lang: 语言代码，默认 'zh'
+        """
         self.app_path = Path(app_path)
         self.app_command = app_command or 'npm run dev'
+        self.lang = lang
 
         if not self.app_path.exists():
             raise FileNotFoundError(f"应用路径不存在: {app_path}")
@@ -206,6 +235,10 @@ class AppLauncher:
     def launch(self) -> subprocess.Popen:
         """启动应用"""
         try:
+            import os
+            os.environ['NEXT_LOCALE'] = self.lang
+            logger.info(f"设置环境变量 NEXT_LOCALE={self.lang}")
+
             logger.info(f"启动应用: {self.app_path}")
             logger.info(f"执行命令: {self.app_command}")
 

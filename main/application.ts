@@ -358,7 +358,7 @@ export default class Application {
     });
 
 
-    const locale = settings.locale || 'en'
+    const locale = process.env.NEXT_LOCALE || settings.locale || 'en'
 
     if (this._isProduction === true && this._isCi === false) {
       this._mainWindow.loadURL(`app://./${locale}/home`);

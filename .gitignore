@@ -70,3 +70,5 @@ yarn-error.log
 screenshots/
 templates/
 .trae/
+automation/__pycache__/
+*.pyc

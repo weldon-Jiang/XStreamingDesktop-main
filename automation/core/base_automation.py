@@ -17,8 +17,14 @@ class BaseAutomation:
     """自动化基类，提供公共方法"""
 
     def __init__(self, ui_detector: UIDetector):
-        self.ui_detector = ui_detector
-        self._failed = False
+        """
+        初始化自动化基类
+
+        Args:
+            ui_detector: UI 检测器实例，用于模板匹配和元素检测
+        """
+        self.ui_detector = ui_detector  # UI 检测器（模板匹配）
+        self._failed = False             # 自动化是否已失败的标志
 
     def terminate(self, reason: str = ""):
         """终止自动化流程"""

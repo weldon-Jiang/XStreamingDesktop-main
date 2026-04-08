@@ -31,10 +31,19 @@ class StreamAutomation(BaseAutomation):
 
     def __init__(self, ui_detector: UIDetector, window_controller: WindowController,
                  app_launcher: AppLauncher, timeout: dict):
+        """
+        初始化串流自动化
+
+        Args:
+            ui_detector: UI 检测器实例
+            window_controller: 窗口控制器
+            app_launcher: 应用启动器
+            timeout: 超时配置 dict
+        """
         super().__init__(ui_detector)
-        self.window_controller = window_controller
-        self.app_launcher = app_launcher
-        self.timeout = timeout
+        self.window_controller = window_controller  # 窗口控制器
+        self.app_launcher = app_launcher           # 应用启动器
+        self.timeout = timeout                    # 超时配置
 
     def terminate(self, reason: str = ""):
         """终止串流流程"""

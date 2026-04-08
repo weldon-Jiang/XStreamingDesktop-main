@@ -32,13 +32,21 @@ class UIDetector:
     """UI 元素检测器"""
 
     def __init__(self, template_dir: str, screenshot_dir: str = "./screenshots", template_mapping: dict = None):
+        """
+        初始化 UI 检测器
+
+        Args:
+            template_dir: 模板图片目录路径
+            screenshot_dir: 截图保存目录，默认 './screenshots'
+            template_mapping: 模板名称到文件名的映射 dict
+        """
         self.template_dir = Path(template_dir)
         self.screenshot_dir = Path(screenshot_dir)
         self.screenshot_dir.mkdir(parents=True, exist_ok=True)
 
-        self.confidence_threshold = 0.35
-        self._template_cache = {}
-        self._template_mapping = template_mapping or {}
+        self.confidence_threshold = 0.35  # 模板匹配置信度阈值
+        self._template_cache = {}          # 模板缓存
+        self._template_mapping = template_mapping or {}  # 模板映射
 
     def _load_template(self, template_name: str) -> Optional[np.ndarray]:
         """加载模板图片"""

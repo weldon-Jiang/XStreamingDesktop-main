@@ -26,6 +26,12 @@ class GameAutomation(BaseAutomation):
     """游戏自动化控制器"""
 
     def __init__(self, ui_detector: UIDetector):
+        """
+        初始化游戏自动化
+
+        Args:
+            ui_detector: UI 检测器实例
+        """
         super().__init__(ui_detector)
 
     def _simulate_gamepad_input(self):

@@ -7,6 +7,7 @@ import sys
 import time
 import argparse
 import subprocess
+import locale
 from pathlib import Path
 from dataclasses import dataclass
 
@@ -25,7 +26,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
+"""
+杀死占用指定端口的进程
+"""
 def kill_process_on_port(port: int):
     """杀死占用指定端口的进程"""
     try:
@@ -52,7 +55,9 @@ def kill_process_on_port(port: int):
     except Exception as e:
         logger.warning(f"检查端口占用失败: {e}")
 
-
+"""
+自动化配置类字段
+"""
 @dataclass
 class AutomationConfig:
     xstreaming_path: str
@@ -63,7 +68,9 @@ class AutomationConfig:
     enabled: bool
     retry_count: int
 
-
+"""
+加载配置文件
+"""
 def load_config(config_path: str = None) -> dict:
     """加载配置文件"""
     if config_path is None:
@@ -72,10 +79,28 @@ def load_config(config_path: str = None) -> dict:
     with open(config_path, 'r', encoding='utf-8') as f:
         return json.load(f)
 
+"""
+获取系统语言环境
+"""
+def get_system_language(lang_arg: str = None) -> str:
+    """获取系统语言环境"""
+    if lang_arg:
+        logger.info(f"使用命令行指定语言: {lang_arg}")
+        return lang_arg
 
-def create_ui_detector(config: dict, config_path: str = None) -> UIDetector:
+    lang = locale.getdefaultlocale()[0]
+    if lang and lang.startswith('zh'):
+        logger.info(f"检测到系统语言: {lang} -> 使用中文")
+        return 'zh'
+    logger.info(f"检测到系统语言: {lang} -> 使用英文")
+    return 'en'
+
+
+def create_ui_detector(config: dict, config_path: str = None, lang_arg: str = None) -> UIDetector:
     """创建 UI 检测器"""
     base_dir = Path(config_path).parent if config_path else Path.cwd()
+
+    system_lang = get_system_language(lang_arg)
 
     login_templates = {
         'login_button': '1_login_button.png',
@@ -103,9 +128,11 @@ def create_ui_detector(config: dict, config_path: str = None) -> UIDetector:
         'loading_game': '16_loading_game.png',
     }
 
-    login_template_dir = base_dir / "templates" / "login"
-    stream_template_dir = base_dir / "templates" / "stream"
-    game_template_dir = base_dir / "templates" / "game"
+    login_template_dir = base_dir / "templates" / "login" / system_lang
+    stream_template_dir = base_dir / "templates" / "stream" / system_lang
+    game_template_dir = base_dir / "templates" / "game" / system_lang
+
+    logger.info(f"模板目录: login={login_template_dir}, stream={stream_template_dir}, game={game_template_dir}")
 
     all_template_mapping = {}
     for k, v in login_templates.items():
@@ -127,8 +154,7 @@ def main():
     parser = argparse.ArgumentParser(description='XStreaming 自动化')
     parser.add_argument('--config', '-c', default=None, help='配置文件路径')
     parser.add_argument('--debug', '-d', action='store_true', help='开启调试模式')
-    parser.add_argument('--skip-login', action='store_true', help='跳过登录步骤')
-    parser.add_argument('--skip-game', action='store_true', help='跳过游戏步骤')
+    parser.add_argument('--lang', '-l', default=None, choices=['zh', 'en'], help='指定语言环境 (zh/en)')
     args = parser.parse_args()
 
     if args.debug:
@@ -156,42 +182,56 @@ def main():
         logger.info("开始 XStreaming 自动化")
         logger.info("=" * 50)
 
-        app_launcher = AppLauncher(
-            automation_config.xstreaming_path,
-            automation_config.dev_command
-        )
+        lang = args.lang or get_system_language()
+        logger.info(f"设置应用语言: {lang}")
+
         window_controller = WindowController(automation_config.window_title)
-        ui_detector = create_ui_detector(config, config_path)
+        ui_detector = create_ui_detector(config, config_path, lang)
 
         logger.info("检查端口 8888 是否被占用...")
         kill_process_on_port(8888)
         time.sleep(1)
 
+        app_launcher = AppLauncher(
+            automation_config.xstreaming_path,
+            automation_config.dev_command,
+            lang=lang
+        )
+
         app_launcher.launch()
         logger.info("应用已启动，等待初始化...")
         time.sleep(5)
 
+        """
+        等待窗口出现
+        """
         if not window_controller.wait_for_window(timeout=automation_config.timeout.get('startup', 60)):
             logger.error("等待窗口超时")
             app_launcher.terminate()
             return
 
+        """
+        窗口置前
+        """
         window_controller.bring_to_front()
         logger.info("窗口已置前")
 
-        if not args.skip_login:
-            login_automation = LoginAutomation(
-                ui_detector,
-                automation_config.account,
-                automation_config.timeout
-            )
-            if not login_automation.run():
-                logger.error("登录流程失败")
-                app_launcher.terminate()
-                return
-        else:
-            logger.info("跳过登录步骤")
+        """
+        登录自动化
+        """
+        login_automation = LoginAutomation(
+            ui_detector,
+            automation_config.account,
+            automation_config.timeout
+        )
+        if not login_automation.run():
+            logger.error("登录流程失败")
+            app_launcher.terminate()
+            return
 
+        """
+        串流自动化
+        """
         stream_automation = StreamAutomation(
             ui_detector,
             window_controller,
@@ -203,15 +243,30 @@ def main():
             app_launcher.terminate()
             return
 
-        if not args.skip_game:
-            game_automation = GameAutomation(ui_detector)
-            game_automation.run()
-        else:
-            logger.info("跳过游戏步骤")
+        """
+        游戏自动化
+        """
+        game_automation = GameAutomation(ui_detector)
+        game_automation.run()
 
         logger.info("=" * 50)
         logger.info("所有自动化流程完成！")
         logger.info("=" * 50)
+
+        # logger.info("正在关闭 Electron 窗口...")
+        # try:
+        #     app_launcher.terminate()
+        #     window_controller.close_window()
+        # except Exception as e:
+        #     logger.warning(f"关闭窗口时出错: {e}")
+
+        # logger.info("清理进程...")
+        # try:
+        #     kill_process_on_port(8888)
+        # except Exception as e:
+        #     logger.warning(f"清理进程时出错: {e}")
+
+        # logger.info("自动化程序已退出")
 
     except KeyboardInterrupt:
         logger.info("用户中断")
